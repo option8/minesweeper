@@ -75,7 +75,7 @@ STROBE       EQU   $C010
 SPEAKER      EQU   $C030
 VBL          EQU   $C02E
 RDVBLBAR     EQU   $C019       ;not VBL (VBL signal low
-
+WAIT		 EQU   $FCA8 
 RAMWRTAUX    EQU   $C005
 RAMWRTMAIN   EQU   $C004
 SETAN3       EQU   $C05E       ;Set annunciator-3 output to 0
@@ -225,8 +225,9 @@ ROWLOOP3								; (ROW 7 to 0)
 COLUMNLOOP3		CLC						; clear CARRY to 0 
 				DEY
 				STY COLUMN				; store column for later retrieval
-				
-				LDA $C030				; get byte, pseudorandom source?
+				LDA #$05				; SLIGHT DELAY
+				JSR WAIT
+				LDA SPEAKER				; get byte, pseudorandom source?
 				ROL						; random bit into Carry
 				ROL						; random bit into Carry
 				ROL BOARDORIGIN,X		; random bit into row byte
@@ -368,7 +369,23 @@ END				JSR HOME
 
 MARKMINE		STA STROBE				; solve current square and move to next space
 
-				JSR DRAWMINE			; solve square
+										; if current square is already solved, ignore
+				LDA ROW					; get ROW and COLUMN
+				CLC
+				ROL						
+				ROL						; offset = ROW * 8 + COLUMN
+				ROL
+				CLC
+				ADC COLUMN
+				TAX			
+				LDA PROGRESSORIGIN,X	; is progress already marked?
+				CLC
+				CMP #$FF
+				BEQ	GOMARKMINE			; STILL UNMARKED
+				JSR BONK				; ignore the mark, keep as solved.
+				RTS
+
+GOMARKMINE		JSR DRAWMINE			; solve square
 				
 				JMP NEXTSQUARE
 ;/MARKMINE
@@ -660,7 +677,7 @@ SHOWSOLVED		CLC
 *	puts * in selected square by ROW, COLUMN, increments score
 **************************************************
 
-DRAWMINE								; puts * in selected square
+DRAWMINE		JSR BEEP				; puts * in selected square
 				LDA ROW					; get ROW and COLUMN
 				CLC
 				ROL						
@@ -709,6 +726,7 @@ DRAWMINE								; puts * in selected square
 *	puts # of adjacent bombs in selected square by ROW, COLUMN, increments progress
 **************************************************
 DRAWSOLVEDSQUARE						; puts number in selected/solved square
+				JSR CLICK				; little sound clicks
 				LDA ROW					; get ROW and COLUMN
 				CLC
 				ROL						
@@ -736,8 +754,9 @@ DRAWSOLVEDSQUARE						; puts number in selected/solved square
 				STA PROGRESSORIGIN,X	; store progress
 				CMP #$08				; IF >= F0, found a bomb
 				BMI	SOLVENOBOMB	
+				JSR BONK				; BONK!
 				LDA #$52				; FOUND BOMB. YOU LOSE.
-				
+								
 SOLVENOBOMB		CLC
 				ADC #$30				; add #$30  (becomes #)
 				STA CHAR				; store as CHAR 
@@ -757,13 +776,21 @@ SOLVENOBOMB		CLC
 SOLVEBOMB		LDA #$FF				; unmark as bomb
 				STA PROGRESSORIGIN,X	;
 										; decrement bombs found
-				LDA SCORE				; inc as decimal for printy printy.
+				LDA SCORE				; decrement as decimal for printy printy.
 				SED
 				SEC
 				SBC #1
 				CLD
 				STA SCORE
 				JSR PRINTSCORE
+
+				LDA PROGRESS				; decrement progress as well, so it will increment properly on jump
+				SED
+				SEC
+				SBC #1
+				CLD
+				STA PROGRESS
+				JSR PRINTPROGRESS
 
 				JMP DRAWSOLVEDSQUARE	; go back and solve it as normal
 
@@ -879,6 +906,37 @@ PLOTCHAR
 
 
 RESET			JMP DRAWBOARD
+
+**************************************************
+*	CLICKS and BEEPS
+**************************************************
+CLICK			LDX #$06
+CLICKLOOP		LDA #$10				; SLIGHT DELAY
+				JSR WAIT
+				LDA SPEAKER				
+				DEX
+				BNE CLICKLOOP
+				RTS
+;/CLICK
+
+BEEP			LDX #$30
+BEEPLOOP		LDA #$08				; short DELAY
+				JSR WAIT
+				LDA SPEAKER				
+				DEX
+				BNE BEEPLOOP
+				RTS
+;/BEEP
+
+
+BONK			LDX #$50
+BONKLOOP		LDA #$20				; longer DELAY
+				JSR WAIT
+				LDA SPEAKER				
+				DEX
+				BNE BONKLOOP
+				RTS
+;/BONK
 
 
 

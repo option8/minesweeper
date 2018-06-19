@@ -29,10 +29,9 @@
 
 **************************************************
 *
-*	TO DO: 	win message when progress = 64 and all bombs marked
+*	TO DO: 	win message when progress = 64 and/or all bombs marked
 *			lose message when clearing a cell with bomb
-*			sounds?
-*
+*			clear adjacent cells when clearing a 0
 **************************************************
 
 
@@ -94,7 +93,7 @@ STROUT		 EQU   $DB3A 		;Y=String ptr high, A=String ptr low
 * START
 **************************************************
 
-				ORG $1000			; PROGRAM DATA STARTS AT $1000
+				ORG $2000			; PROGRAM DATA STARTS AT $2000
 					
 **************************************************
 *	Draws the blank board borders, corners, borders
@@ -523,7 +522,12 @@ PRINTPROGRESS					; prints number of bombs marked
 				STA CH
 				JSR VTAB
 				LDA PROGRESS
-				JSR $FDDA			; prints HEX of Accumulator
+				
+				CMP #$64
+				BNE PROGRESSGO
+				JMP YOUWIN
+				
+PROGRESSGO		JSR $FDDA			; prints HEX of Accumulator
 				RTS
 
 **************************************************
@@ -756,6 +760,7 @@ DRAWSOLVEDSQUARE						; puts number in selected/solved square
 				BMI	SOLVENOBOMB	
 				JSR BONK				; BONK!
 				LDA #$52				; FOUND BOMB. YOU LOSE.
+				JSR YOULOSE
 								
 SOLVENOBOMB		CLC
 				ADC #$30				; add #$30  (becomes #)
@@ -771,7 +776,13 @@ SOLVENOBOMB		CLC
 				ROL						; ROW * 2, COLUMN * 2
 				STA PLOTCOLUMN				 
 				JSR PLOTCHAR 
-				RTS
+				
+				LDA SOLVEORIGIN,X		; if solution is zero
+				BNE SOLVEDADJACENT		; mark adjacent squares as solved as well
+				JSR SOLVEADJACENTSQUARES
+SOLVEDADJACENT	RTS
+	
+
 
 SOLVEBOMB		LDA #$FF				; unmark as bomb
 				STA PROGRESSORIGIN,X	;
@@ -799,8 +810,155 @@ SOLVEBOMB		LDA #$FF				; unmark as bomb
 
 
 
+
+
+
+
+
+SOLVEADJACENTSQUARE						; puts number in adjacent squares
+				JSR CLICK				; little sound clicks
+				LDA ROW					; get ROW and COLUMN
+				CLC
+				ROL						
+				ROL						; offset = ROW * 8 + COLUMN
+				ROL
+				CLC
+				ADC COLUMN
+				TAX			
+				LDA PROGRESSORIGIN,X	; check if it hasn't been solved yet, 
+				CLC
+				CMP #$FF				; put the solution in the square, 
+				BNE	SOLVENOBOMB2		; increment the progress
+										
+				LDA PROGRESS			; inc as decimal for printy printy.
+				SED
+				CLC
+				ADC #1
+				CLD
+				STA PROGRESS
+				JSR PRINTPROGRESS
+										
+				LDA SOLVEORIGIN,X		; get SOLVEORIGIN + offset
+				STA PROGRESSORIGIN,X	; store progress
+								
+SOLVENOBOMB2	CLC
+				ADC #$30				; add #$30  (becomes #)
+				STA CHAR				; store as CHAR 
+				LDA ROW
+				CLC
+				ADC #$01				; zero-based to 1-based
+				ROL						; ROW * 2, COLUMN * 2
+				STA PLOTROW
+				LDA COLUMN
+				CLC
+				ADC #$01				; zero-based to 1-based
+				ROL						; ROW * 2, COLUMN * 2
+				STA PLOTCOLUMN				 
+				JSR PLOTCHAR 
+				RTS
+	
+;/SOLVEADJACENTSQUARE
+
+
+
+
 **************************************************
-*	solves squares for adjacent bombs, updates solved map, increments bomb count
+*	solves adjacent squares if solved square is 0
+**************************************************
+SOLVEADJACENTSQUARES
+				
+SOLVERIGHT		LDA COLUMN				; column + 1 unless col=7
+				CLC
+				CMP #$07
+				BEQ SOLVELEFT			; = 7 skip ahead
+				INC COLUMN
+				JSR SOLVEADJACENTSQUARE ; solve with col + 1
+
+				LDA ROW					; solve lower right
+				CMP #$07
+				BEQ SOLVEUR						
+				INC ROW						
+				JSR SOLVEADJACENTSQUARE ; solve with col + 1, row + 1
+				DEC ROW
+SOLVEUR			LDA ROW					; solve upper right	
+				BEQ SOLVERIGHTDONE		; if ROW = 0, skip ahead
+				DEC ROW
+				JSR SOLVEADJACENTSQUARE ; solve with col + 1, row - 1
+				INC ROW
+
+SOLVERIGHTDONE	DEC COLUMN				; reset column
+
+SOLVELEFT		LDA COLUMN		
+				BEQ SOLVEDOWN			; if column = 0, skip ahead
+				DEC COLUMN				; solve with col - 1
+				JSR SOLVEADJACENTSQUARE
+
+				LDA ROW					; solve lower left
+				CMP #$07
+				BEQ SOLVEUL						
+				INC ROW						
+				JSR SOLVEADJACENTSQUARE ; solve with col - 1, row + 1
+				DEC ROW
+SOLVEUL			LDA ROW					; solve upper right	
+				BEQ SOLVELEFTDONE		; if ROW = 0, skip ahead
+				DEC ROW
+				JSR SOLVEADJACENTSQUARE ; solve with col - 1, row - 1
+				INC ROW
+
+SOLVELEFTDONE	INC COLUMN				; reset column
+
+SOLVEDOWN		LDA ROW
+				CLC 
+				CMP #$07
+				BEQ SOLVEUP
+				INC ROW
+				JSR SOLVEADJACENTSQUARE ; solve with row + 1
+				DEC ROW					; reset row
+SOLVEUP			LDA ROW		
+				BEQ ADJDONE				; if row = 0, skip ahead
+				DEC ROW					; solve with row - 1
+				JSR SOLVEADJACENTSQUARE
+				INC ROW					; reset column
+					
+ADJDONE
+				RTS
+;/SOLVEADJACENTSQUARES		
+
+
+
+**************************************************
+*	WIN or LOSE?
+**************************************************
+
+WINNER			ASC "YOU WIN!                     ",00
+LOSER			ASC "YOU LOSE!                    ",00
+RESETLINE		ASC "Press R to Reset.            ",00
+
+
+YOUWIN			LDA #$13
+				STA CV					; jump down
+				JSR LEFTCOLUMN
+				LDY #>WINNER
+				LDA #<WINNER
+				JSR STROUT				;Y=String ptr high, A=String ptr low
+				JMP RTORESET
+
+YOULOSE			LDA #$13
+				STA CV					; jump down
+				JSR LEFTCOLUMN
+				LDY #>LOSER
+				LDA #<LOSER
+				JSR STROUT				;Y=String ptr high, A=String ptr low
+				
+RTORESET		JSR LEFTCOLUMN
+				LDY #>RESETLINE
+				LDA #<RESETLINE
+				JSR STROUT				;Y=String ptr high, A=String ptr low
+				RTS
+;/YOUWIN
+
+**************************************************
+*	processes squares for adjacent bombs, updates solved map, increments bomb count
 **************************************************
 FOUNDBOMB								; how many have we found?	
 				LDA BOMBS				; inc as decimal for printy printy.
@@ -890,7 +1048,7 @@ PLUSNINE		LDY COLUMN
 
 
 **************************************************
-*	prints one CHAR at PLOTROW,PLOTCOLUMN
+*	prints one CHAR at PLOTROW,PLOTCOLUMN - clobbers A,Y
 **************************************************
 PLOTCHAR
 				LDY PLOTROW

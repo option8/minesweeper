@@ -208,7 +208,7 @@ SETUPLOOP		LDA #$0
 				LDA #$FF
 				STA PROGRESSORIGIN,X	; progress reset - FF = unsolved
 				INX
-				CPX ]ROWS*]COLUMNS		; $#40 = hex 64 = 8x8
+				CPX #$40				; $#40 = hex 64 = 8x8
 				BNE SETUPLOOP
 ;/setuploop
 				

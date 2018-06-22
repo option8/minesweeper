@@ -29,9 +29,10 @@
 
 **************************************************
 *
-*	TO DO: 	win message when progress = 64 and/or all bombs marked
-*			lose message when clearing a cell with bomb
-*			clear adjacent cells when clearing a 0
+*	TO DO: 	end-of-game state, so you can't keep marking cells after you lose
+*			draw board with mousetext, if available?
+*			elegant quit to prodos?
+*			
 **************************************************
 
 
@@ -80,7 +81,6 @@ RAMWRTMAIN   EQU   $C004
 SETAN3       EQU   $C05E       ;Set annunciator-3 output to 0
 SET80VID     EQU   $C00D       ;enable 80-column display mode (WR-only)
 HOME 		 EQU   $FC58			; clear the text screen
-
 CH           EQU   $24			; cursor Horiz
 CV           EQU   $25			; cursor Vert
 VTAB         EQU   $FC22       ; Sets the cursor vertical position (from CV)
@@ -88,17 +88,35 @@ COUT         EQU   $FDED       ; Calls the output routine whose address is store
                                ;  normally COUTI
 STROUT		 EQU   $DB3A 		;Y=String ptr high, A=String ptr low
 
+ROMINIT      EQU        $FB2F
+ROMSETKBD    EQU        $FE89
+ROMSETVID    EQU        $FE93
+
+BLINK		EQU		$F3
+SPEED		EQU		$F1
 
 **************************************************
-* START
+* START - sets up various fiddly zero page bits
 **************************************************
 
-				ORG $2000			; PROGRAM DATA STARTS AT $2000
+						ORG $2000			; PROGRAM DATA STARTS AT $2000
+
+						JSR ROMSETVID            ;Init char output hook at $36/$37
+						JSR ROMSETKBD            ;Init key input hook at $38/$39
+						JSR ROMINIT                ;GR/HGR off, Text page 1
+
+						LDA #$01
+						STA SPEED						; string/char output speed
+						LDA #$00
+						STA BLINK						; blinking text? no thanks.
+
+DRAWBOARD				JSR HOME
+
+
 					
 **************************************************
 *	Draws the blank board borders, corners, borders
 **************************************************
-DRAWBOARD				JSR HOME
 						
 CORNERS					LDA #$01
 						STA PLOTROW
@@ -303,7 +321,7 @@ COLUMNLOOP2		DEC COLUMN
 				BNE ROWLOOP2			; loop 
 	
 ;/rowloop2		
-
+				
 
 **************************************************
 *	writes instructions, scoreboard
@@ -313,7 +331,8 @@ COLUMNLOOP2		DEC COLUMN
 				JSR PRINTSCORE
 				JSR PRINTBOMBS
 				JSR PRINTPROGRESS
-				
+
+
 
 **************************************************
 *	MAIN LOOP
@@ -761,7 +780,8 @@ DRAWSOLVEDSQUARE						; puts number in selected/solved square
 				JSR BONK				; BONK!
 				LDA #$52				; FOUND BOMB. YOU LOSE.
 				JSR YOULOSE
-								
+				RTS						; stop solving and return to waiting for key
+							
 SOLVENOBOMB		CLC
 				ADC #$30				; add #$30  (becomes #)
 				STA CHAR				; store as CHAR 

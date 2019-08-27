@@ -1,36 +1,8 @@
 	DSK MS
 
 **************************************************
-*	minesweeper
-*
-*	test board
-*
-*	0 0 0 0 0 0 0 0 
-*	0 0 0 0 0 0 0 0 
-*	0 0 0 0 0 0 0 0 
-*	0 0 0 1 0 0 0 0 = 0x10
-*	0 0 0 0 1 0 0 0 = 0x08
-*	0 0 0 0 0 0 0 0 
-*	0 0 0 0 0 0 0 0 
-*	0 0 0 0 0 0 0 0 
-*
-*	solve result:
-*
-*	0 0 0 0 0 0 0 0 
-*	0 0 0 0 0 0 0 0 
-*	0 0 1 1 1 0 0 0 
-*	0 0 1 X 2 1 0 0 
-*	0 0 1 2 X 1 0 0 
-*	0 0 0 1 1 1 0 0 
-*	0 0 0 0 0 0 0 0 
-*	0 0 0 0 0 0 0 0 
-*
-**************************************************
-
-**************************************************
 *
 *	TO DO: 	end-of-game state, so you can't keep marking cells after you lose
-*			draw board with mousetext, if available?
 *			elegant quit to prodos?
 *			
 **************************************************
@@ -41,22 +13,20 @@
 * Variables
 **************************************************
 
-SOLVEORIGIN		EQU		$9100		; 'solved' board to reveal
-PROGRESSORIGIN	EQU		$9200		; revealed squares
 BOMBLOC			EQU 	$FC	
 ROWBYTE			EQU		$FD
 ROW				EQU		$FA			; row/col in board
 COLUMN			EQU		$FB
 PLOTROW			EQU		$FE			; row/col in text page
 PLOTCOLUMN		EQU		$FF
-]ROWS			=		#$8
-]COLUMNS		=		#$8
 CHAR			EQU		$FC			; char to plot
 STRLO			EQU		$EB			; string lo/hi for printing
 STRHI			EQU		$EC
 SCORE			EQU		$ED			; bombs found
 PROGRESS 		EQU		$EE			; cells cleared
 BOMBS			EQU		$EF			; total bombs
+PLAYERLEVEL		EQU		$EA			; increase level, increase number of bombs.
+LEVELTARGET		EQU		$E9			; 
 
 **************************************************
 * Apple Standard Memory Locations
@@ -92,6 +62,8 @@ ROMINIT      EQU        $FB2F
 ROMSETKBD    EQU        $FE89
 ROMSETVID    EQU        $FE93
 
+ALTCHAR		EQU		$C00F		; enables alternative character set - mousetext
+
 BLINK		EQU		$F3
 SPEED		EQU		$F1
 
@@ -107,111 +79,68 @@ SPEED		EQU		$F1
 
 						LDA #$01
 						STA SPEED						; string/char output speed
+						STA ALTCHAR						; enable mousetext
+						STA PLAYERLEVEL
 						LDA #$00
 						STA BLINK						; blinking text? no thanks.
 
 DRAWBOARD				JSR HOME
-
+						JSR RNDINIT
 
 					
 **************************************************
 *	Draws the blank board borders, corners, borders
 **************************************************
 						
-CORNERS					LDA #$01
-						STA PLOTROW
+
+HLINES					LDA #$01	; start at column 2
 						STA PLOTCOLUMN
-						LDA #$2E		; .
+
+HLINESLOOP				LDA #$4C	; -
+						STA CHAR
+						LDA #$01	; row 1					
+						STA PLOTROW
+						JSR PLOTCHAR
+						
+						LDA #$12
+						STA PLOTROW
+						LDA #$4C
 						STA CHAR
 						JSR PLOTCHAR
-						
-						LDA #$11
-						STA PLOTCOLUMN
-						JSR PLOTCHAR
-						
-						LDA #$27
-						STA CHAR		; '
-						LDA #$11
-						STA PLOTROW
-						STA PLOTCOLUMN
-						JSR PLOTCHAR
-						
-						LDA #$01
-						STA PLOTCOLUMN
-						JSR PLOTCHAR
-;/CORNERS
-
-HLINES					LDA #$02	; start at column 2
-						STA PLOTCOLUMN
-						LDA #$2D	; -
-						STA CHAR
-						
-HLINESLOOP				LDA #$01	; row 1
-						STA PLOTROW
-						JSR PLOTCHAR
-
-HROWSLOOP				INC PLOTROW
-						INC PLOTROW		; row 3, 5, ...
-						JSR PLOTCHAR
-						LDA PLOTROW
-						CMP #$10	; goes to 17
-						BMI HROWSLOOP
-;/HROWSLOOP						
+									
 						INC PLOTCOLUMN
 						LDA PLOTCOLUMN
-						CMP #$11	; goes to 16
+						CMP #$12	; goes to 16
 						BMI HLINESLOOP
 ;/HLINES						
 
-VLINES					LDA #$02	; start at column 2
+
+
+
+VLINES					LDA #$01		; start at row 2
 						STA PLOTROW
-						LDA #$3A	; :
+VLINESLOOP				LDA #$5A		; :
 						STA CHAR
 						
-VLINESLOOP				LDA #$01	; row 1
+						LDA #$00		; row 1 - left border
 						STA PLOTCOLUMN
 						JSR PLOTCHAR
 
-VCOLUMNSLOOP			INC PLOTCOLUMN	; row 2, 4, ...
-						INC PLOTCOLUMN	; row 3, 5, ...
+						LDA #$12
+						STA PLOTCOLUMN
+						LDA #$5F		; right box border
+						STA CHAR
 						JSR PLOTCHAR
-						LDA PLOTCOLUMN
-						CMP #$11	; goes to 16
-						BMI VCOLUMNSLOOP
-;/VCOLUMNSLOOP
+
 
 						INC PLOTROW
 						LDA PLOTROW
-						CMP #$11	; goes to 16
+						CMP #$12		; goes to 16
 						BMI VLINESLOOP
 ;/VLINES						
 
-* 	+ ROW*2 + 1, COLUMN*2 + 1
 
-PLUSES
 
-						LDA #$03	; starts at 3,3
-						STA PLOTROW
-						LDA #$2B	; +
-						STA CHAR
-						
-PLUSLOOP				
-						LDA #$03	; starts at 3,3
-						STA PLOTCOLUMN
-PLUSCOLS				
-						JSR PLOTCHAR
-						INC PLOTCOLUMN
-						INC PLOTCOLUMN
-						LDA PLOTCOLUMN
-						CMP #$10
-						BMI PLUSCOLS
-;/PLUSCOLS
-						INC PLOTROW
-						INC PLOTROW
-						LDA PLOTROW
-						CMP #$10
-						BMI PLUSLOOP
-;/PLUSLOOP
 
 **************************************************
 *	sets up solving matrix, resets scoreboard
@@ -234,19 +163,26 @@ SETUPBOARD
 				LDX #$8					; X = 8
 ROWLOOP3								; (ROW 7 to 0)
 				DEX
-				STX ROW
 				LDA #$0
 				STA BOARDORIGIN,X 		; set byte at BOARDORIGIN,x 0
 
 				LDY #$8					;	start columnloop (COLUMN 0 to 7)
-COLUMNLOOP3		CLC						; clear CARRY to 0 
+COLUMNLOOP3		
 				DEY
-				STY COLUMN				; store column for later retrieval
-				LDA #$05				; SLIGHT DELAY
-				JSR WAIT
-				LDA SPEAKER				; get byte, pseudorandom source?
-				ROL						; random bit into Carry
-				ROL						; random bit into Carry
+
+				LDA PLAYERLEVEL
+				STA LEVELTARGET
+				ROL LEVELTARGET	;x2
+				ROL LEVELTARGET	;x4
+				ROL LEVELTARGET	;x8
+				ROL LEVELTARGET	;x16
+				LDA #$FF
+				SBC LEVELTARGET
+				STA LEVELTARGET			; FF - 16xLEVEL = target
+				
+				JSR RND					; random byte
+				CMP LEVELTARGET				; greater than target=carry true (1/16 * level=chance)
+
 				ROL BOARDORIGIN,X		; random bit into row byte
 				
 				TYA						; last COLUMN?
@@ -293,6 +229,10 @@ NOBOMB									; do nothing.
 				BNE ROWLOOP				; loop 
 	
 ;/rowloop		
+
+
+CHECKBOMBS		LDA BOMBS				; on the off chance the random has come up all zeros
+				BEQ SETUP
 
 
 **************************************************
@@ -625,7 +565,7 @@ LEFTCOLUMN		INC CV
 *	puts ? in unsolved square by ROW, COLUMN
 **************************************************
 DRAWSQUARE								; puts ? in unsolved square
-				LDA #$BF				; "?"
+				LDA #$5E				; "?"
 				STA CHAR				; store as CHAR 
 				LDA ROW
 				CLC
@@ -644,7 +584,7 @@ DRAWSQUARE								; puts ? in unsolved square
 *	puts _ in selected square by ROW, COLUMN
 **************************************************
 HILITESQUARE								; puts _ in selected square
-				LDA #$5F				; "_"
+				LDA #$5D				; "+"
 				STA CHAR				; store as CHAR 
 				LDA ROW
 				CLC
@@ -674,12 +614,15 @@ DESELECTSQUARE							; puts number/? in deselected square
 				ADC COLUMN				; offset = ROW * 8 + COLUMN
 				TAX			
 				LDA PROGRESSORIGIN,X	; get SOLVEORIGIN + offset
+				BEQ SHOWSOLVEDZERO		; solved and zero, show space
 				CMP #$FF
 				BNE SHOWSOLVED			; if == FF , not yet solved. CHAR = ?
-				LDA #$8F
+				LDA #$2E				; add 30 to get mousetext...
 				STA CHAR				; store as CHAR 				
 SHOWSOLVED		CLC
-				ADC #$30				; add #$30  (becomes #)
+				ADC #$10				; add #$30  (becomes #)
+SHOWSOLVEDZERO	CLC
+				ADC #$20				; add #$30  (becomes #)
 				STA CHAR				; store as CHAR 
 				LDA ROW
 				CLC
@@ -709,7 +652,7 @@ DRAWMINE		JSR BEEP				; puts * in selected square
 				CLC
 				ADC COLUMN
 				TAX			
-				LDA #$7A				; * for mine
+				LDA #$2B				; * for mine
 				STA PROGRESSORIGIN,X	; store marker in progress				
 				CLC
 				ADC #$30				; add #$30  (becomes *)
@@ -759,7 +702,8 @@ DRAWSOLVEDSQUARE						; puts number in selected/solved square
 				ADC COLUMN
 				TAX			
 				LDA PROGRESSORIGIN,X	; check if it hasn't been solved yet, 
-				CMP #$7A				; if it's already been marked as a mine
+				BEQ SOLVECLEAR			; found zero, mark as space instead of 0
+				CMP #$2B				; if it's already been marked as a mine
 				BEQ SOLVEBOMB		    ; mark it unsolved
 				CLC
 				CMP #$FF				; put the solution in the square, 
@@ -775,6 +719,7 @@ DRAWSOLVEDSQUARE						; puts number in selected/solved square
 										
 				LDA SOLVEORIGIN,X		; get SOLVEORIGIN + offset
 				STA PROGRESSORIGIN,X	; store progress
+				BEQ SOLVECLEAR			; found zero, mark as space instead of 0
 				CMP #$08				; IF >= F0, found a bomb
 				BMI	SOLVENOBOMB	
 				JSR BONK				; BONK!
@@ -783,7 +728,9 @@ DRAWSOLVEDSQUARE						; puts number in selected/solved square
 				RTS						; stop solving and return to waiting for key
 							
 SOLVENOBOMB		CLC
-				ADC #$30				; add #$30  (becomes #)
+				ADC #$10				; add #$30  (becomes #)
+SOLVECLEAR		CLC
+				ADC #$20
 				STA CHAR				; store as CHAR 
 				LDA ROW
 				CLC
@@ -847,6 +794,7 @@ SOLVEADJACENTSQUARE						; puts number in adjacent squares
 				TAX			
 				LDA PROGRESSORIGIN,X	; check if it hasn't been solved yet, 
 				CLC
+				BEQ SOLVECLEAR2
 				CMP #$FF				; put the solution in the square, 
 				BNE	SOLVENOBOMB2		; increment the progress
 										
@@ -860,9 +808,12 @@ SOLVEADJACENTSQUARE						; puts number in adjacent squares
 										
 				LDA SOLVEORIGIN,X		; get SOLVEORIGIN + offset
 				STA PROGRESSORIGIN,X	; store progress
-								
+				BEQ SOLVECLEAR2
+				
 SOLVENOBOMB2	CLC
-				ADC #$30				; add #$30  (becomes #)
+				ADC #$10				; add #$30  (becomes #)
+SOLVECLEAR2		CLC
+				ADC #$20
 				STA CHAR				; store as CHAR 
 				LDA ROW
 				CLC
@@ -961,6 +912,7 @@ YOUWIN			LDA #$13
 				LDY #>WINNER
 				LDA #<WINNER
 				JSR STROUT				;Y=String ptr high, A=String ptr low
+				INC PLAYERLEVEL			; increase difficulty for next round, unless they lose
 				JMP RTORESET
 
 YOULOSE			LDA #$13
@@ -969,6 +921,10 @@ YOULOSE			LDA #$13
 				LDY #>LOSER
 				LDA #<LOSER
 				JSR STROUT				;Y=String ptr high, A=String ptr low
+				LDA PLAYERLEVEL
+				CMP #$01
+				BEQ RTORESET
+				DEC PLAYERLEVEL			; make easier next round
 				
 RTORESET		JSR LEFTCOLUMN
 				LDY #>RESETLINE
@@ -1123,8 +1079,10 @@ BONKLOOP		LDA #$20				; longer DELAY
 *
 **************************************************
 
-BOARDORIGIN		 	HEX 	80,00,00,10,08,00,00,01 ; sets up the board
+BOARDORIGIN		 	HEX 	80,00,00,10,08,00,00,01 ; sets up the default board
 
+SOLVEORIGIN			DS 256
+PROGRESSORIGIN		DS 256
 
 
 **************************************************
@@ -1182,33 +1140,43 @@ LoLineTableL         db    <Lo01,<Lo02,<Lo03
                      db    <Lo19,<Lo20,<Lo21
                      db    <Lo22,<Lo23,<Lo24
 
-*	ROW, COLUMN		
+**************************************************
+* DATASOFT RND 6502
+* BY JAMES GARON
+* 10/02/86
+* Thanks to John Brooks for this. I modified it slightly.
+*
+* returns a randomish number in Accumulator.
+**************************************************
+RNDSEED			DS 3
 
-*   . at 1,1 			#$2E
-*   . at 1,17
-*   ' at 17,1 			#$27
-*   ' at 17,17
-*   - 1,2 to 1,16		#$2D
-*   - 17,2 to 17,16
-*   : 2,1 to 16,1		#$3A
-*   : ROW*2,COLUMN*2 + 1
-*   - ROW*2 + 1, COLUMN*2 
-* 	+ ROW*2 + 1, COLUMN*2 + 1
+RNDINIT
+				LDA	$C030			; #$AB
+				STA	RNDSEED
+				LDA	RDVBLBAR		;	$4E				; #$55
+				STA	RNDSEED+1
+				LDA	$C060			; #$7E
+				STA	RNDSEED+2
+				RTS	
 
-* .---------------.  			
-* :1:2:3:4:5:6:7:8:			
-* :-+-+-+-+-+-+-+-:
-* :2:2:3:4:5:6:7:8:			
-* :-+-+-+-+-+-+-+-:
-* :3:2:3:4:5:6:7:8:			
-* :-+-+-+-+-+-+-+-:
-* :4:2:3:4:5:6:7:8:			
-* :-+-+-+-+-+-+-+-:
-* :5:2:3:4:5:6:7:8:			
-* :-+-+-+-+-+-+-+-:
-* :6:2:3:4:5:6:7:8:			
-* :-+-+-+-+-+-+-+-:
-* :7:2:3:4:5:6:7:8:			
-* :-+-+-+-+-+-+-+-:
-* :8:2:3:4:5:6:7:8:			
-* '---------------'
+* RESULT IN ACC
+RND  			LDA	RNDSEED
+     			ROL	RNDSEED
+     			EOR	RNDSEED
+     			ROR	RNDSEED
+     			INC	RNDSEED+1
+     			BNE	RND10
+     			LDA	RNDSEED+2
+     			INC	RNDSEED+2
+RND10			ADC	RNDSEED+1
+     			BVC	RND20
+     			INC	RNDSEED+1
+     			BNE	RND20
+     			LDA	RNDSEED+2
+     			INC	RNDSEED+2
+RND20			STA	RNDSEED
+     			RTS	
+
+RND16			JSR RND			; limits RND output to 0-F
+				AND #$0F		; strips high nibble
+				RTS
